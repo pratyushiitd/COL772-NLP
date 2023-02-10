@@ -15,6 +15,8 @@ from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics import make_scorer, f1_score
 from sklearn.model_selection import GridSearchCV
+from imblearn.over_sampling import SMOTE
+from imblearn.combine import SMOTEENN
 
 # import pandas as pd
 # import numpy as np

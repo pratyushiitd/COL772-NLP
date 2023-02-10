@@ -58,15 +58,18 @@ class DataLoader:
     
     def test_train_split(self, train_df, test_size=0.2):
         X_train, X_test, y_train, y_test = train_test_split(train_df['reviews'], train_df['labels'], test_size=self.args.test_size, random_state=self.args.random_state)
+
         weights = pd.Series(y_train).value_counts().reset_index()
         weights.columns = ['label', 'counts']
         weights['weights'] = weights['counts'].sum() / weights['counts']
         weights = weights.set_index('label')['weights'].to_dict()
         sample_weights = pd.Series(y_train).map(weights)
+
         return X_train, X_test, y_train, y_test, sample_weights
 
 class Classifier:
     def __init__(self, args, X_train, X_test, y_train, y_test, sample_weights):
+        self.args = args
         self.X_train = X_train
         self.X_test = X_test
         self.y_train = y_train
@@ -75,13 +78,25 @@ class Classifier:
         self.tfidf_vectorizer = TfidfVectorizer(min_df=args.min_df, max_df=args.max_df, ngram_range=(1,2))
         self.X_train_tfidf = self.tfidf_vectorizer.fit_transform(self.X_train)
         self.X_test_tfidf = self.tfidf_vectorizer.transform(self.X_test)
+        # print("Sampling starting")
+        # print(self.X_train_tfidf.shape, self.y_train.shape, self.y_train.value_counts())
+        #Solve class imbalance
+        # smote = SMOTE(sampling_strategy='auto', random_state=42)
+        # self.X_train_balanced, self.y_train_balanced = smote.fit_resample(self.X_train_tfidf, self.y_train)
+
+        # smote_enn = SMOTEENN(sampling_strategy='auto', random_state=0, n_jobs=-1)
+        # self.X_train_balanced, self.y_train_balanced = smote_enn.fit_resample(self.X_train_tfidf, self.y_train)
+
+        # print("Finished starting")
+        # print(self.X_train_balanced.shape, self.y_train_balanced.shape, self.y_train_balanced.value_counts())
         grid_params = {
-            'C': [0.1, 1, 10, 100], 
-            'penalty': ['l1', 'l2'], 
+            'C': [0.1, 1, 10], 
+            'penalty': ['l1', 'l2'],
+            'solver': ['liblinear'] 
             }
         scoring = make_scorer(lambda x,y : (f1_score(x,y,average='micro')+f1_score(x,y,average='macro'))/2, greater_is_better=True)
         if (args.model == 'nb'): self.model = MultinomialNB()
-        elif (args.model == 'lr'): self.model = LogisticRegression(solver='liblinear')
+        elif (args.model == 'lr'): self.model = LogisticRegression(C = 1, solver='liblinear')
         elif (args.model == 'rf'): self.model = RandomForestClassifier()
         elif (args.model == 'svm'): self.model = LinearSVC()
         elif (args.model == 'knn'): self.model = KNeighborsClassifier()
@@ -103,7 +118,11 @@ class Classifier:
         f1_micro = f1_score(y_test, predicted_categories, average='micro')
         f1_macro = f1_score(y_test, predicted_categories, average='macro')
         print("F1 Score = {}%".format(100.0 * (f1_micro+f1_macro)/2.0))
-
+        if (self.args.model == 'grid_lr'):
+            print("Best params: ", self.model.best_params_)
+            print("Best score: ", self.model.best_score_)
+            print("Best estimator: ", self.model.best_estimator_)
+        print("Params: ", self.args)
     
 if __name__ == '__main__':
     args = parse_args().parse_args()
@@ -114,7 +133,7 @@ if __name__ == '__main__':
     # text_preprocessor.preprocess()
     # train_df.to_csv(args.out_file, index=False)
 
-    print(train_df.head)
+    print(train_df.head(5))
     X_train, X_test, y_train, y_test, sample_weights = Loader.test_train_split(train_df, args.test_size)
     classifier = Classifier(args, X_train, X_test, y_train, y_test, sample_weights)
     classifier.train()
