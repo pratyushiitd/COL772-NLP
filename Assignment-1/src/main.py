@@ -10,8 +10,10 @@ def parse_args():
     parser.add_argument('--out_file', type=str, default='train_processed.csv', help='path to processed training data')
     parser.add_argument('--random_state', type=int, default=42, help='random state for train test split')
     parser.add_argument('--test_size', type=float, default=0.2, help='test size for train test split')
-    parser.add_argument('--model', type=str, default='nb', help='model to use', choices=['nb', 'lr', 'rf', 'svm', 'knn'])
+    parser.add_argument('--model', type=str, default='nb', help='model to use', choices=['nb', 'lr', 'rf', 'svm', 'knn', 'grid_lr'])
     parser.add_argument('--ngrams', type=int, default=1, help='ngrams to use for the model')
+    parser.add_argument('--min_df', type=int, default=1, help='min_df to use for the model')
+    parser.add_argument('--max_df', type=float, default=1.0, help='max_df to use for the model')
     return parser
 
 class TextPreprocessor():
@@ -56,39 +58,53 @@ class DataLoader:
     
     def test_train_split(self, train_df, test_size=0.2):
         X_train, X_test, y_train, y_test = train_test_split(train_df['reviews'], train_df['labels'], test_size=self.args.test_size, random_state=self.args.random_state)
-        return X_train, X_test, y_train, y_test
+        weights = pd.Series(y_train).value_counts().reset_index()
+        weights.columns = ['label', 'counts']
+        weights['weights'] = weights['counts'].sum() / weights['counts']
+        weights = weights.set_index('label')['weights'].to_dict()
+        sample_weights = pd.Series(y_train).map(weights)
+        return X_train, X_test, y_train, y_test, sample_weights
 
 class Classifier:
-    def __init__(self, args, X_train, X_test, y_train, y_test):
+    def __init__(self, args, X_train, X_test, y_train, y_test, sample_weights):
         self.X_train = X_train
         self.X_test = X_test
         self.y_train = y_train
         self.y_test = y_test
-        if (args.model == 'nb'): self.model = MultinomialNB(class_weight='balanced')
-        elif (args.model == 'lr'): self.model = LogisticRegression()
+        self.sample_weights = sample_weights
+        self.tfidf_vectorizer = TfidfVectorizer(min_df=args.min_df, max_df=args.max_df, ngram_range=(1,2))
+        self.X_train_tfidf = self.tfidf_vectorizer.fit_transform(self.X_train)
+        self.X_test_tfidf = self.tfidf_vectorizer.transform(self.X_test)
+        grid_params = {
+            'C': [0.1, 1, 10, 100], 
+            'penalty': ['l1', 'l2'], 
+            }
+        scoring = make_scorer(lambda x,y : (f1_score(x,y,average='micro')+f1_score(x,y,average='macro'))/2, greater_is_better=True)
+        if (args.model == 'nb'): self.model = MultinomialNB()
+        elif (args.model == 'lr'): self.model = LogisticRegression(solver='liblinear')
         elif (args.model == 'rf'): self.model = RandomForestClassifier()
         elif (args.model == 'svm'): self.model = LinearSVC()
         elif (args.model == 'knn'): self.model = KNeighborsClassifier()
+        elif (args.model == 'grid_lr'): 
+            self.model = GridSearchCV(LogisticRegression(solver='liblinear'), 
+                                        scoring=scoring,
+                                        param_grid = grid_params, cv=5, verbose=True, n_jobs=-1)
         else: raise Exception('Invalid model')
-        self.Pipeline = Pipeline([
-                ('vect', CountVectorizer(ngram_range=(1, args.ngrams))),
-                ('tfidf', TfidfTransformer()),
-                ('clf', self.model)])
-        
+    
     def train(self):
-        self.Pipeline.fit(self.X_train, self.y_train, clf__sample_weight=None)
+        self.model.fit(self.X_train_tfidf, self.y_train, sample_weight=self.sample_weights)
 
     def predict(self):
-        self.y_pred = self.Pipeline.predict(self.X_test)
+        self.y_pred = self.model.predict(self.X_test_tfidf)
 
     def evaluate(self):
         predicted_categories = self.y_pred
         predicted_categories = pd.Series(predicted_categories)
         f1_micro = f1_score(y_test, predicted_categories, average='micro')
         f1_macro = f1_score(y_test, predicted_categories, average='macro')
-        print("F1 Score = ", (f1_micro+f1_macro)/2)
+        print("F1 Score = {}%".format(100.0 * (f1_micro+f1_macro)/2.0))
 
-
+    
 if __name__ == '__main__':
     args = parse_args().parse_args()
     Loader = DataLoader(args)
@@ -99,8 +115,8 @@ if __name__ == '__main__':
     # train_df.to_csv(args.out_file, index=False)
 
     print(train_df.head)
-    X_train, X_test, y_train, y_test = Loader.test_train_split(train_df, args.test_size)
-    classifier = Classifier(args, X_train, X_test, y_train, y_test)
+    X_train, X_test, y_train, y_test, sample_weights = Loader.test_train_split(train_df, args.test_size)
+    classifier = Classifier(args, X_train, X_test, y_train, y_test, sample_weights)
     classifier.train()
     classifier.predict()
     classifier.evaluate()

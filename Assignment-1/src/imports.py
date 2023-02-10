@@ -12,8 +12,9 @@ from sklearn.svm import LinearSVC
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.pipeline import Pipeline
 from sklearn.feature_extraction.text import CountVectorizer
-from sklearn.feature_extraction.text import TfidfTransformer
-from sklearn.metrics import f1_score
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics import make_scorer, f1_score
+from sklearn.model_selection import GridSearchCV
 
 # import pandas as pd
 # import numpy as np
