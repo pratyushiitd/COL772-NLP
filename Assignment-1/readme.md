@@ -16,5 +16,4 @@ The objective of this assignment is to develop a text categorization system that
 ### Running the code
 
 -   To run the code, use the following command
-    `chmod +x run.sh`
-    `./run.sh`
+    `chmod +x run.sh && ./run.sh`
