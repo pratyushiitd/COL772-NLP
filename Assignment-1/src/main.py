@@ -10,6 +10,8 @@ def parse_args():
     parser.add_argument('--out_file', type=str, default='train_processed.csv', help='path to processed training data')
     parser.add_argument('--random_state', type=int, default=42, help='random state for train test split')
     parser.add_argument('--test_size', type=float, default=0.2, help='test size for train test split')
+    parser.add_argument('--model', type=str, default='nb', help='model to use', choices=['nb', 'lr', 'rf', 'svm', 'knn'])
+    parser.add_argument('--ngrams', type=int, default=1, help='ngrams to use for the model')
     return parser
 
 class TextPreprocessor():
@@ -25,7 +27,7 @@ class TextPreprocessor():
         except:
             nltk.download('stopwords')
             self.stopwords = set(stopwords.words("english"))
-    
+
     def preprocess(self):
         if (self.lemmatize): self.lemmatize_text(self.train_df)
         print(self.train_df.head())
@@ -44,41 +46,62 @@ class TextPreprocessor():
         train_df["reviews"] = train_df["reviews"].apply(lambda x: " ".join([word for word in x.split() if word not in self.stopwords]))
     
 class DataLoader:
-    def __init__(self, file_path):
-        self.file_path = file_path
+    def __init__(self, args):
+        self.args = args
 
     def load_data(self):
-        df = pd.read_csv(self.file_path, header=None, names=['reviews', 'labels'])
+        df = pd.read_csv(self.args.train_file, header=None, names=['reviews', 'labels'])
         df.dropna(axis = 0, inplace=True)
         return df
     
-    def test_train_split(self, df, test_size=0.2):
-        train, test = train_test_split(df, test_size=test_size, random_state=42)
-        return train, test
+    def test_train_split(self, train_df, test_size=0.2):
+        X_train, X_test, y_train, y_test = train_test_split(train_df['reviews'], train_df['labels'], test_size=self.args.test_size, random_state=self.args.random_state)
+        return X_train, X_test, y_train, y_test
 
 class Classifier:
-    def __init__(self, train_df, test_df):
-        self.train_df = train_df
-        self.test_df = test_df
-
-    def train(self):
+    def __init__(self, args, X_train, X_test, y_train, y_test):
+        self.X_train = X_train
+        self.X_test = X_test
+        self.y_train = y_train
+        self.y_test = y_test
+        if (args.model == 'nb'): self.model = MultinomialNB(class_weight='balanced')
+        elif (args.model == 'lr'): self.model = LogisticRegression()
+        elif (args.model == 'rf'): self.model = RandomForestClassifier()
+        elif (args.model == 'svm'): self.model = LinearSVC()
+        elif (args.model == 'knn'): self.model = KNeighborsClassifier()
+        else: raise Exception('Invalid model')
+        self.Pipeline = Pipeline([
+                ('vect', CountVectorizer(ngram_range=(1, args.ngrams))),
+                ('tfidf', TfidfTransformer()),
+                ('clf', self.model)])
         
-        pass
+    def train(self):
+        self.Pipeline.fit(self.X_train, self.y_train, clf__sample_weight=None)
 
     def predict(self):
-        pass
+        self.y_pred = self.Pipeline.predict(self.X_test)
 
     def evaluate(self):
-        pass
+        predicted_categories = self.y_pred
+        predicted_categories = pd.Series(predicted_categories)
+        f1_micro = f1_score(y_test, predicted_categories, average='micro')
+        f1_macro = f1_score(y_test, predicted_categories, average='macro')
+        print("F1 Score = ", (f1_micro+f1_macro)/2)
+
 
 if __name__ == '__main__':
     args = parse_args().parse_args()
-    train_df = DataLoader(args.train_file).load_data()
-    print(train_df.head())
+    Loader = DataLoader(args)
+    train_df = Loader.load_data()
 
     # text_preprocessor = TextPreprocessor(train_df, args)
     # text_preprocessor.preprocess()
     # train_df.to_csv(args.out_file, index=False)
 
-    train, test = DataLoader(args.train_file).test_train_split(train_df, args.test_size)
+    print(train_df.head)
+    X_train, X_test, y_train, y_test = Loader.test_train_split(train_df, args.test_size)
+    classifier = Classifier(args, X_train, X_test, y_train, y_test)
+    classifier.train()
+    classifier.predict()
+    classifier.evaluate()
 
