@@ -17,6 +17,10 @@ from sklearn.metrics import make_scorer, f1_score
 from sklearn.model_selection import GridSearchCV
 from imblearn.over_sampling import SMOTE
 from imblearn.combine import SMOTEENN
+from nltk import word_tokenize
+from nltk.corpus import wordnet
+import string
+from nltk.sentiment.vader import SentimentIntensityAnalyzer
 
 # import pandas as pd
 # import numpy as np

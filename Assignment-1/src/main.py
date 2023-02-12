@@ -4,15 +4,15 @@ from imports import *
 def parse_args():
     parser = argparse.ArgumentParser(description='arguements for the text classifier')
     parser.add_argument('--train_file', type=str, default='train.csv', help='path to training data')
-    parser.add_argument('--lemmatize', type=bool, default=True, help='lemmatize the text')
-    parser.add_argument('--stem', type=bool, default=True, help='stem the text')
-    parser.add_argument('--remove_stopwords', type=bool, default=True, help='remove stop words')
+    parser.add_argument('--lemmatize', type=int, default=True, help='lemmatize the text')
+    parser.add_argument('--stem', type=int, default=True, help='stem the text')
+    parser.add_argument('--remove_stopwords', type=int, default=True, help='remove stop words')
     parser.add_argument('--out_file', type=str, default='train_processed.csv', help='path to processed training data')
     parser.add_argument('--random_state', type=int, default=42, help='random state for train test split')
     parser.add_argument('--test_size', type=float, default=0.2, help='test size for train test split')
     parser.add_argument('--model', type=str, default='nb', help='model to use', choices=['nb', 'lr', 'rf', 'svm', 'knn', 'grid_lr'])
     parser.add_argument('--ngrams', type=int, default=1, help='ngrams to use for the model')
-    parser.add_argument('--min_df', type=int, default=1, help='min_df to use for the model')
+    parser.add_argument('--min_df', type=float, default=1, help='min_df to use for the model')
     parser.add_argument('--max_df', type=float, default=1.0, help='max_df to use for the model')
     return parser
 
@@ -75,7 +75,7 @@ class Classifier:
         self.y_train = y_train
         self.y_test = y_test
         self.sample_weights = sample_weights
-        self.tfidf_vectorizer = TfidfVectorizer(min_df=args.min_df, max_df=args.max_df, ngram_range=(1,2))
+        self.tfidf_vectorizer = TfidfVectorizer(min_df=args.min_df, max_df=args.max_df, ngram_range=(1,2), max_features=1000, sublinear_tf=True, norm='l2', use_idf=True, smooth_idf=True)
         self.X_train_tfidf = self.tfidf_vectorizer.fit_transform(self.X_train)
         self.X_test_tfidf = self.tfidf_vectorizer.transform(self.X_test)
         # print("Sampling starting")
@@ -96,7 +96,7 @@ class Classifier:
             }
         scoring = make_scorer(lambda x,y : (f1_score(x,y,average='micro')+f1_score(x,y,average='macro'))/2, greater_is_better=True)
         if (args.model == 'nb'): self.model = MultinomialNB()
-        elif (args.model == 'lr'): self.model = LogisticRegression(C = 1, solver='liblinear')
+        elif (args.model == 'lr'): self.model = LogisticRegression(C = 1, solver='liblinear', penalty="l2")
         elif (args.model == 'rf'): self.model = RandomForestClassifier()
         elif (args.model == 'svm'): self.model = LinearSVC()
         elif (args.model == 'knn'): self.model = KNeighborsClassifier()
@@ -126,17 +126,17 @@ class Classifier:
     
 if __name__ == '__main__':
     args = parse_args().parse_args()
-    Loader = DataLoader(args)
-    train_df = Loader.load_data()
+    print(args)
+    # Loader = DataLoader(args)
+    # train_df = Loader.load_data()
 
     # text_preprocessor = TextPreprocessor(train_df, args)
-    # text_preprocessor.preprocess()
+    # # text_preprocessor.preprocess()
     # train_df.to_csv(args.out_file, index=False)
 
-    print(train_df.head(5))
-    X_train, X_test, y_train, y_test, sample_weights = Loader.test_train_split(train_df, args.test_size)
-    classifier = Classifier(args, X_train, X_test, y_train, y_test, sample_weights)
-    classifier.train()
-    classifier.predict()
-    classifier.evaluate()
-
+    # print(train_df.head(5))
+    # X_train, X_test, y_train, y_test, sample_weights = Loader.test_train_split(train_df, args.test_size)
+    # classifier = Classifier(args, X_train, X_test, y_train, y_test, sample_weights)
+    # classifier.train()
+    # classifier.predict()
+    # classifier.evaluate()

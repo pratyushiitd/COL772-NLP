@@ -5,26 +5,29 @@ from imports import *
 def parse_args():
     parser = argparse.ArgumentParser(description='arguements for the text classifier')
     parser.add_argument('--train_file', type=str, default='train.csv', help='path to training data')
-    parser.add_argument('--lemmatize', type=bool, default=True, help='lemmatize the text')
-    parser.add_argument('--stem', type=bool, default=True, help='stem the text')
-    parser.add_argument('--remove_stopwords', type=bool, default=True, help='remove stop words')
+    parser.add_argument('--lemmatize', type=int, default=True, help='lemmatize the text')
+    parser.add_argument('--stem', type=int, default=True, help='stem the text')
+    parser.add_argument('--remove_stopwords', type=int, default=True, help='remove stop words')
     parser.add_argument('--out_file', type=str, default='train_processed.csv', help='path to processed training data')
     parser.add_argument('--random_state', type=int, default=42, help='random state for train test split')
     parser.add_argument('--test_size', type=float, default=0.2, help='test size for train test split')
     parser.add_argument('--model', type=str, default='nb', help='model to use', choices=['nb', 'lr', 'rf', 'svm', 'knn', 'grid_lr'])
     parser.add_argument('--ngrams', type=int, default=1, help='ngrams to use for the model')
-    parser.add_argument('--min_df', type=float, default=1, help='min_df to use for the model')
+    parser.add_argument('--min_df', type=int, default=1, help='min_df to use for the model')
     parser.add_argument('--max_df', type=float, default=1.0, help='max_df to use for the model')
+    parser.add_argument('--tfidf_max_feat', type=int, default=None, help='max_features to use for the model')
     return parser
 
 class TextPreprocessor():
     def __init__(self, train_df, args):
+        self.args = args
         self.train_df = train_df
         self.lemmatize = args.lemmatize
         self.lemmatizer = WordNetLemmatizer()
         self.stemmer = PorterStemmer()
         self.stem = args.stem
         self.remove_stopwords = args.remove_stopwords
+        self.sid = SentimentIntensityAnalyzer()
         try:
             self.stopwords = set(stopwords.words("english"))
         except:
@@ -32,31 +35,19 @@ class TextPreprocessor():
             self.stopwords = set(stopwords.words("english"))
 
     def preprocess(self):
-
-        # self.train_df["reviews"] = self.train_df["reviews"].str.replace('[^\w\s]','')
-        # self.train_df["reviews"] = self.train_df["reviews"].str.replace('\d+', '')
-        # self.train_df["reviews"] = self.train_df["reviews"].apply(lambda x: " ".join([self.lemmatizer.lemmatize(word) for word in x.split()]))
-        # self.train_df["reviews"] = self.train_df["reviews"].apply(lambda x: " ".join([self.stemmer.stem(word) for word in x.split()]))
-        # self.train_df["reviews"] = self.train_df["reviews"].apply(lambda x: " ".join([word for word in x.split() if word not in self.stopwords]))
-        # self.train_df["reviews"] = self.train_df["reviews"].apply(lambda x: " ".join([word + "_" + tag for word, tag in nltk.pos_tag(word_tokenize(x))]))
-        print("Cleaning started")
+        
+        self.train_df["sentiment"] = self.train_df["reviews"].apply(lambda x: self.sid.polarity_scores(x))  
         self.train_df["reviews"] = self.train_df["reviews"].apply(self.clean)
-        print(train_df.head(5))
-        # print("Cleaning done")
-        # add sentiment anaylsis columns
-        sid = SentimentIntensityAnalyzer()
-        self.train_df["sentiment"] = self.train_df["reviews"].apply(lambda x: sid.polarity_scores(x))
         
         self.train_df = pd.concat([self.train_df.drop(['sentiment'], axis=1), self.train_df['sentiment'].apply(pd.Series)], axis=1)
-        print("Sentiment done")     
-        # add word count column
+        print("Sentiment done")   
+
         self.train_df["word_count"] = self.train_df["reviews"].apply(lambda x: len(str(x).split()))
         print("Word count done")
-        # add char count column
+
         self.train_df["char_count"] = self.train_df["reviews"].apply(lambda x: sum(len(word) for word in str(x).split()))
         print("Char count done")
-
-        tfidf =TfidfVectorizer(max_df=0.95, use_idf=True, norm = "l2",ngram_range=(1,2), min_df=5, max_features=1000, sublinear_tf=True)
+        tfidf =TfidfVectorizer(min_df = self.args.min_df, max_df=self.args.max_df, use_idf=True, norm = "l2",ngram_range=(1,self.args.ngrams), sublinear_tf=True)#, max_features=self.args.tfidf_max_feat)
         print("TFIDF started")
         tfidf_result = tfidf.fit_transform(self.train_df["reviews"]).toarray()
         print("TFIDF fit transofmr")
@@ -83,32 +74,27 @@ class TextPreprocessor():
             else:
                 return wordnet.NOUN
         text = text.lower()
-        text = [word.strip(string.punctuation) for word in text.split(" ")]
-        text = [word for word in text if not any(c.isdigit() for c in word)]
-        text = [x for x in text if x not in self.stopwords]
-        text = [t for t in text if len(t) > 0]
-        pos_tags = nltk.pos_tag(text)
-        text = [self.lemmatizer.lemmatize(t[0], get_wordnet_pos(t[1])) for t in pos_tags]
-        text = [t for t in text if len(t) > 1]
-        text = " ".join(text)
-        return(text)
-
+        words = text.split()
+        words = [word.strip(string.punctuation) for word in words if not any(c.isdigit() for c in word) and word not in self.stopwords]
+        words = [word for word in words if len(word) > 2]
+        # pos_tags = nltk.pos_tag(words)
+        # words = [self.lemmatizer.lemmatize(t[0], get_wordnet_pos(t[1])) for t in pos_tags if len(t[0]) > 1]
+        text = " ".join(words)
+        return text
 
 class DataLoader:
     def __init__(self, args):
         self.args = args
 
     def load_data(self):
-        df = pd.read_csv(self.args.train_file, header=None, names=['reviews', 'labels'], nrows=20000)
+        df = pd.read_csv(self.args.train_file, header=None, names=['reviews', 'labels'], nrows=1000)
         df.dropna(axis = 0, inplace=True)
         return df
     
     def test_train_split(self, train_df, test_size=0.2):
-        # features = ['reviews', 'word_count', 'char_count', 'neg', 'neu', 'pos', 'compound']
         ignore_features = ['reviews', 'labels']
         features = [x for x in train_df.columns if x not in ignore_features]
         X_train, X_test, y_train, y_test = train_test_split(train_df[features], train_df['labels'], test_size=self.args.test_size, random_state=self.args.random_state)
-
         weights = pd.Series(y_train).value_counts().reset_index()
         weights.columns = ['label', 'counts']
         weights['weights'] = weights['counts'].sum() / weights['counts']
@@ -134,7 +120,7 @@ class Classifier:
         grid_params = {
             'C': [0.1, 1, 10, 100], 
             'penalty': ['l1', 'l2'],
-            'solver': ['liblinear'] 
+            'solver': ['liblinear', 'saga'] 
             }
         scoring = make_scorer(lambda x,y : (f1_score(x,y,average='micro')+f1_score(x,y,average='macro'))/2, greater_is_better=True)
         if (args.model == 'nb'): 
@@ -142,7 +128,7 @@ class Classifier:
         elif (args.model == 'lr'): 
             self.model = LogisticRegression(C = 1, solver='liblinear', penalty='l2')
         elif (args.model == 'rf'): 
-            self.model = RandomForestClassifier()
+            self.model = RandomForestClassifier(n_estimators=100)
         elif (args.model == 'svm'): 
             self.model = LinearSVC()
         elif (args.model == 'knn'): 
@@ -157,6 +143,7 @@ class Classifier:
         self.model.fit(self.X_train, self.y_train, sample_weight=self.sample_weights)
 
     def predict(self):
+        self.y_score = self.model.decision_function(self.X_test)
         self.y_pred = self.model.predict(self.X_test)
 
     def evaluate(self):
