@@ -1,0 +1,7 @@
+Discussed the assignment with 
+- Aman Gupta 2019CS10673
+
+- Model used LogisticRegression(C=1, class_weight='balanced', solver='liblinear', multi_class='ovr', max_iter = 1000, verbose=False)
+
+- For preprocessing, used Lemmatization and Stopwords Removal. Stemming did not increase the accuracy.
+- Used Bigrams, gave better accuracy than unigrams and trigrams.
