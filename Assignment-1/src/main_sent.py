@@ -38,29 +38,18 @@ class TextPreprocessor():
         
         self.train_df["sentiment"] = self.train_df["reviews"].apply(lambda x: self.sid.polarity_scores(x))  
         self.train_df["reviews"] = self.train_df["reviews"].apply(self.clean)
-        
-        self.train_df = pd.concat([self.train_df.drop(['sentiment'], axis=1), self.train_df['sentiment'].apply(pd.Series)], axis=1)
-        print("Sentiment done")   
-
+        self.train_df = pd.concat([self.train_df.drop(['sentiment'], axis=1), self.train_df['sentiment'].apply(pd.Series)], axis=1) 
         self.train_df["word_count"] = self.train_df["reviews"].apply(lambda x: len(str(x).split()))
-        print("Word count done")
-
         self.train_df["char_count"] = self.train_df["reviews"].apply(lambda x: sum(len(word) for word in str(x).split()))
-        print("Char count done")
-        tfidf =TfidfVectorizer(min_df = self.args.min_df, max_df=self.args.max_df, use_idf=True, norm = "l2",ngram_range=(1,self.args.ngrams), sublinear_tf=True)#, max_features=self.args.tfidf_max_feat)
-        print("TFIDF started")
+        tfidf =TfidfVectorizer(min_df = self.args.min_df, max_df=self.args.max_df, use_idf=True, norm = "l2",ngram_range=(1,self.args.ngrams), sublinear_tf=True, max_features=self.args.tfidf_max_feat)
         tfidf_result = tfidf.fit_transform(self.train_df["reviews"]).toarray()
-        print("TFIDF fit transofmr")
         tfidf_df = pd.DataFrame(tfidf_result, columns = tfidf.get_feature_names_out())
-        print("TFIDF df")
         tfidf_df.columns = ["word_" + str(x) for x in tfidf_df.columns]
-        print("TFIDF col")
         tfidf_df.index = train_df.index
         self.train_df = pd.concat([self.train_df, tfidf_df], axis=1)
-        print("TFIDF done", self.train_df.shape)
-
-        print(self.train_df.head(5) )
+        print(self.train_df.head(5))
         return self.train_df
+    
     def clean(self, text):
         def get_wordnet_pos(pos_tag):
             if pos_tag.startswith('J'):
@@ -77,8 +66,8 @@ class TextPreprocessor():
         words = text.split()
         words = [word.strip(string.punctuation) for word in words if not any(c.isdigit() for c in word) and word not in self.stopwords]
         words = [word for word in words if len(word) > 2]
-        # pos_tags = nltk.pos_tag(words)
-        # words = [self.lemmatizer.lemmatize(t[0], get_wordnet_pos(t[1])) for t in pos_tags if len(t[0]) > 1]
+        pos_tags = nltk.pos_tag(words)
+        words = [self.lemmatizer.lemmatize(t[0], get_wordnet_pos(t[1])) for t in pos_tags if len(t[0]) > 1]
         text = " ".join(words)
         return text
 
@@ -126,7 +115,7 @@ class Classifier:
         if (args.model == 'nb'): 
             self.model = MultinomialNB()
         elif (args.model == 'lr'): 
-            self.model = LogisticRegression(C = 1, solver='liblinear', penalty='l2')
+            self.model = LogisticRegression(C=1.0, class_weight='balanced', solver='liblinear', multi_class='ovr')
         elif (args.model == 'rf'): 
             self.model = RandomForestClassifier(n_estimators=100)
         elif (args.model == 'svm'): 
@@ -165,7 +154,6 @@ if __name__ == '__main__':
     print(args)
     text_preprocessor = TextPreprocessor(train_df, args)
     train_df = text_preprocessor.preprocess()
-    train_df.to_csv(args.out_file, index=False)
 
     print(train_df.head(5))
     X_train, X_test, y_train, y_test, sample_weights = Loader.test_train_split(train_df, args.test_size)
