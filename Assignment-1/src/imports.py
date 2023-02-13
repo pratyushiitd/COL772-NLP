@@ -2,7 +2,6 @@ import pandas as pd
 import numpy as np
 import string
 from sklearn.metrics import f1_score
-import matplotlib.pyplot as plt
 from sklearn.model_selection import train_test_split
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.feature_extraction.text import TfidfVectorizer
