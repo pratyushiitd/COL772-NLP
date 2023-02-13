@@ -1,17 +1,12 @@
 #create yml file
 
-name: col772
-
 channels:
   - defaults
   - conda-forge
-  - pytorch
 
 dependencies:
   - python=3.8
-  - pip
-  - pip:
-    -nltk
-    -numpy
-    -pandas
-    -scikit-learn
+  - nltk
+  - numpy
+  - pandas
+  - scikit-learn
